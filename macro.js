@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 
 const PHONE_NUMBER = '01044801692';
 const TARGET_URL = 'https://iic-restaurant2.vercel.app/';
-const TARGET_TIME = '13:00'; // 테스트용 13:00 (나중에 12:00으로 변경)
+const TARGET_TIME = '13:00';
 const MAX_RETRIES = 5;
 const RETRY_INTERVAL_MS = 5000;
 
@@ -24,8 +24,10 @@ async function runMacro() {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       console.log(`[시도 ${attempt}/${MAX_RETRIES}] 페이지 로딩 중...`);
-      await page.goto(TARGET_URL, { waitUntil: 'networkidle', timeout: 30000 });
-      await page.waitForTimeout(3000);
+
+      // networkidle 대신 load로 변경 (타임아웃 문제 해결)
+      await page.goto(TARGET_URL, { waitUntil: 'load', timeout: 60000 });
+      await page.waitForTimeout(5000); // JS 렌더링 대기
 
       // 페이지 텍스트 출력 (디버깅)
       const bodyText = await page.evaluate(() => document.body.innerText);
@@ -50,7 +52,7 @@ async function runMacro() {
 
       if (slotStatus.toUpperCase().includes('FULL') || slotStatus.includes('꽉')) {
         console.log('FULL 상태. 재시도...');
-        await page.reload({ waitUntil: 'networkidle' });
+        await page.reload({ waitUntil: 'load' });
         await page.waitForTimeout(RETRY_INTERVAL_MS);
         continue;
       }
