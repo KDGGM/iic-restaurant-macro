@@ -1,0 +1,23 @@
+{
+  "name": "iic-restaurant-macro",
+  "version": "1.0.0",
+  "description": "IIC Restaurant 자동 예약 매크로",
+  "main": "macro.js",
+  "dependencies": {
+    "playwright": "^1.43.0"
+  }
+}
+```
+
+→ **Commit changes** → **Commit changes** 클릭
+
+---
+
+## 확인
+
+저장소 메인 페이지에서 아래 4개 파일이 모두 보여야 합니다:
+```
+✅ .github/workflows/reserve.yml
+✅ macro.js
+✅ package.json          ← 이게 없었던 것
+✅ package-lock.json
