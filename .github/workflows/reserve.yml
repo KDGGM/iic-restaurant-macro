@@ -2,11 +2,7 @@ name: IIC Restaurant 자동 예약 매크로
 
 on:
   schedule:
-    # 한국 시간 08:01 = UTC 23:01 (전날)
-    # 평일(월~금)만 실행
     - cron: '1 23 * * 0-4'
-
-  # 수동 실행 옵션 (테스트용)
   workflow_dispatch:
 
 jobs:
@@ -22,15 +18,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: 의존성 설치
-        run: npm ci
+        run: npm install
 
       - name: Playwright Chromium 브라우저 설치
         run: npx playwright install chromium --with-deps
 
-      - name: 🍽️ 예약 매크로 실행
+      - name: 예약 매크로 실행
         run: node macro.js
 
       - name: 결과 스크린샷 업로드 (성공)
@@ -48,3 +43,4 @@ jobs:
           name: error-screenshots-${{ github.run_id }}
           path: error_attempt_*.png
           retention-days: 7
+          if-no-files-found: ignore
