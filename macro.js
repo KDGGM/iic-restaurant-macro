@@ -24,12 +24,9 @@ async function runMacro() {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       console.log(`[시도 ${attempt}/${MAX_RETRIES}] 페이지 로딩 중...`);
-
-      // networkidle 대신 load로 변경 (타임아웃 문제 해결)
       await page.goto(TARGET_URL, { waitUntil: 'load', timeout: 60000 });
-      await page.waitForTimeout(5000); // JS 렌더링 대기
+      await page.waitForTimeout(5000);
 
-      // 페이지 텍스트 출력 (디버깅)
       const bodyText = await page.evaluate(() => document.body.innerText);
       console.log('페이지 텍스트:', bodyText.substring(0, 500));
 
@@ -64,24 +61,55 @@ async function runMacro() {
         if (el) el.click();
       }, TARGET_TIME);
       console.log(`${TARGET_TIME} 클릭 완료`);
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
 
       // 연락처 입력
       const phoneInput = page.locator('input').first();
       await phoneInput.click();
-      await phoneInput.fill(PHONE_NUMBER);
+      await phoneInput.fill('');
+      await phoneInput.type(PHONE_NUMBER, { delay: 50 });
       console.log('연락처 입력 완료:', PHONE_NUMBER);
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
 
-      // 예약하기 클릭
-      await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll('button'));
-        const btn = btns.find(b => b.innerText?.includes('예약하기'));
-        if (btn) btn.click();
+      // 예약하기 버튼 찾기 - 여러 방식으로 시도
+      console.log('예약하기 버튼 탐색 중...');
+      const btnInfo = await page.evaluate(() => {
+        const all = Array.from(document.querySelectorAll('*'));
+        return all
+          .filter(el => el.innerText?.trim() === '예약하기 →' || el.innerText?.trim() === '예약하기')
+          .map(el => ({
+            tag: el.tagName,
+            text: el.innerText?.trim(),
+            className: el.className,
+            disabled: el.disabled,
+            type: el.type
+          }));
       });
-      console.log('예약하기 클릭 완료!');
+      console.log('예약하기 버튼 정보:', JSON.stringify(btnInfo));
 
-      await page.waitForTimeout(3000);
+      // 클릭 시도 1: Playwright locator
+      try {
+        const btn = page.locator('button:has-text("예약하기")').first();
+        await btn.click({ timeout: 5000 });
+        console.log('예약하기 버튼 클릭 완료 (방법1)');
+      } catch (e) {
+        console.log('방법1 실패, 방법2 시도...');
+        // 클릭 시도 2: evaluate로 직접 클릭
+        await page.evaluate(() => {
+          const all = Array.from(document.querySelectorAll('*'));
+          const btn = all.find(el => el.innerText?.includes('예약하기'));
+          if (btn) {
+            btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            console.log('방법2 클릭:', btn.tagName, btn.className);
+          }
+        });
+        console.log('예약하기 버튼 클릭 완료 (방법2)');
+      }
+
+      // 결과 대기 및 스크린샷
+      await page.waitForTimeout(5000);
+      const afterText = await page.evaluate(() => document.body.innerText);
+      console.log('클릭 후 페이지:', afterText.substring(0, 300));
       await page.screenshot({ path: 'reservation_result.png' });
       console.log('✅ 예약 완료!');
 
