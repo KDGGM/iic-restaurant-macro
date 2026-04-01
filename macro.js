@@ -28,7 +28,7 @@ async function runMacro() {
       await page.waitForTimeout(5000);
 
       const bodyText = await page.evaluate(() => document.body.innerText);
-      console.log('페이지 텍스트:', bodyText.substring(0, 500));
+      console.log('페이지 텍스트:', bodyText.substring(0, 300));
 
       // 슬롯 상태 확인
       const slotStatus = await page.evaluate((time) => {
@@ -54,62 +54,43 @@ async function runMacro() {
         continue;
       }
 
-      // 시간 슬롯 클릭
-      await page.evaluate((time) => {
-        const elements = Array.from(document.querySelectorAll('*'));
-        const el = elements.find(e => e.children.length === 0 && e.innerText?.includes(time));
-        if (el) el.click();
-      }, TARGET_TIME);
+      // 시간 슬롯을 Playwright locator로 직접 클릭 (React 이벤트 호환)
+      console.log('시간 슬롯 클릭 시도...');
+      const timeSlot = page.locator(`text=${TARGET_TIME}`).first();
+      await timeSlot.scrollIntoViewIfNeeded();
+      await timeSlot.click({ force: true });
       console.log(`${TARGET_TIME} 클릭 완료`);
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(2000);
+
+      // 클릭 후 선택됐는지 확인
+      const afterClickText = await page.evaluate(() => document.body.innerText);
+      console.log('슬롯 클릭 후 페이지:', afterClickText.substring(0, 300));
 
       // 연락처 입력
       const phoneInput = page.locator('input').first();
-      await phoneInput.click();
+      await phoneInput.scrollIntoViewIfNeeded();
+      await phoneInput.click({ force: true });
       await phoneInput.fill('');
-      await phoneInput.type(PHONE_NUMBER, { delay: 50 });
+      await page.waitForTimeout(300);
+      await phoneInput.type(PHONE_NUMBER, { delay: 80 });
       console.log('연락처 입력 완료:', PHONE_NUMBER);
       await page.waitForTimeout(1000);
 
-      // 예약하기 버튼 찾기 - 여러 방식으로 시도
-      console.log('예약하기 버튼 탐색 중...');
-      const btnInfo = await page.evaluate(() => {
-        const all = Array.from(document.querySelectorAll('*'));
-        return all
-          .filter(el => el.innerText?.trim() === '예약하기 →' || el.innerText?.trim() === '예약하기')
-          .map(el => ({
-            tag: el.tagName,
-            text: el.innerText?.trim(),
-            className: el.className,
-            disabled: el.disabled,
-            type: el.type
-          }));
-      });
-      console.log('예약하기 버튼 정보:', JSON.stringify(btnInfo));
+      // 스크린샷 (버튼 클릭 전 상태 확인용)
+      await page.screenshot({ path: 'before_submit.png' });
 
-      // 클릭 시도 1: Playwright locator
-      try {
-        const btn = page.locator('button:has-text("예약하기")').first();
-        await btn.click({ timeout: 5000 });
-        console.log('예약하기 버튼 클릭 완료 (방법1)');
-      } catch (e) {
-        console.log('방법1 실패, 방법2 시도...');
-        // 클릭 시도 2: evaluate로 직접 클릭
-        await page.evaluate(() => {
-          const all = Array.from(document.querySelectorAll('*'));
-          const btn = all.find(el => el.innerText?.includes('예약하기'));
-          if (btn) {
-            btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            console.log('방법2 클릭:', btn.tagName, btn.className);
-          }
-        });
-        console.log('예약하기 버튼 클릭 완료 (방법2)');
-      }
+      // 예약하기 → 버튼 클릭 (Playwright locator 사용)
+      console.log('예약하기 버튼 클릭 시도...');
+      const submitBtn = page.locator('button:has-text("예약하기 →")').first();
+      await submitBtn.scrollIntoViewIfNeeded();
+      await submitBtn.click({ force: true });
+      console.log('예약하기 버튼 클릭 완료!');
 
-      // 결과 대기 및 스크린샷
       await page.waitForTimeout(5000);
-      const afterText = await page.evaluate(() => document.body.innerText);
-      console.log('클릭 후 페이지:', afterText.substring(0, 300));
+
+      const resultText = await page.evaluate(() => document.body.innerText);
+      console.log('예약 후 페이지:', resultText.substring(0, 300));
+
       await page.screenshot({ path: 'reservation_result.png' });
       console.log('✅ 예약 완료!');
 
