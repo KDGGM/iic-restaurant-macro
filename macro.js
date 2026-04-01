@@ -2,11 +2,12 @@ const { chromium } = require('playwright');
 
 const PHONE_NUMBER = '01044801692';
 const TARGET_URL = 'https://iic-restaurant2.vercel.app/';
+const TARGET_TIME = '13:00'; // 테스트용 13:00 (나중에 12:00으로 변경)
 const MAX_RETRIES = 5;
 const RETRY_INTERVAL_MS = 5000;
 
 async function runMacro() {
-  console.log(`[${new Date().toISOString()}] 매크로 시작`);
+  console.log(`[${new Date().toISOString()}] 매크로 시작 - ${TARGET_TIME} 예약 시도`);
 
   const browser = await chromium.launch({
     headless: true,
@@ -26,68 +27,48 @@ async function runMacro() {
       await page.goto(TARGET_URL, { waitUntil: 'networkidle', timeout: 30000 });
       await page.waitForTimeout(3000);
 
-      // 현재 페이지 HTML 출력 (디버깅용)
+      // 페이지 텍스트 출력 (디버깅)
       const bodyText = await page.evaluate(() => document.body.innerText);
-      console.log('페이지 텍스트 일부:', bodyText.substring(0, 500));
+      console.log('페이지 텍스트:', bodyText.substring(0, 500));
 
-      // 모든 버튼 텍스트 출력
-      const allButtons = await page.evaluate(() => {
-        return Array.from(document.querySelectorAll('button, div[role="button"], [class*="slot"], [class*="time"]'))
-          .map(el => el.innerText?.trim())
-          .filter(Boolean);
-      });
-      console.log('발견된 버튼들:', JSON.stringify(allButtons));
-
-      // 12:00 텍스트 포함된 요소 찾기
-      const allElements = await page.evaluate(() => {
-        return Array.from(document.querySelectorAll('*'))
-          .filter(el => el.children.length === 0 && el.innerText?.includes('12:00'))
-          .map(el => ({
-            tag: el.tagName,
-            text: el.innerText?.trim(),
-            className: el.className,
-            parentText: el.parentElement?.innerText?.trim()?.substring(0, 100)
-          }));
-      });
-      console.log('12:00 포함 요소들:', JSON.stringify(allElements));
-
-      // FULL 여부 확인
-      const isFull = await page.evaluate(() => {
+      // 슬롯 상태 확인
+      const slotStatus = await page.evaluate((time) => {
         const elements = Array.from(document.querySelectorAll('*'));
-        const el = elements.find(e => e.children.length === 0 && e.innerText?.includes('12:00'));
+        const el = elements.find(e => e.children.length === 0 && e.innerText?.includes(time));
         if (!el) return 'NOT_FOUND';
-        const parent = el.closest('[class*="slot"], [class*="time"], div') || el.parentElement;
+        const parent = el.closest('div') || el.parentElement;
         return parent?.innerText?.trim();
-      });
-      console.log('12:00 슬롯 상태:', isFull);
+      }, TARGET_TIME);
 
-      if (isFull === 'NOT_FOUND') {
-        console.log('12:00 슬롯을 찾을 수 없습니다. 재시도...');
+      console.log(`${TARGET_TIME} 슬롯 상태:`, slotStatus);
+
+      if (slotStatus === 'NOT_FOUND') {
+        console.log('슬롯을 찾을 수 없습니다. 재시도...');
         await page.waitForTimeout(RETRY_INTERVAL_MS);
         continue;
       }
 
-      if (typeof isFull === 'string' && (isFull.toUpperCase().includes('FULL') || isFull.includes('꽉'))) {
-        console.log('12:00 FULL 상태. 재시도...');
+      if (slotStatus.toUpperCase().includes('FULL') || slotStatus.includes('꽉')) {
+        console.log('FULL 상태. 재시도...');
         await page.reload({ waitUntil: 'networkidle' });
         await page.waitForTimeout(RETRY_INTERVAL_MS);
         continue;
       }
 
-      // 12:00 클릭
-      await page.evaluate(() => {
+      // 시간 슬롯 클릭
+      await page.evaluate((time) => {
         const elements = Array.from(document.querySelectorAll('*'));
-        const el = elements.find(e => e.children.length === 0 && e.innerText?.includes('12:00'));
+        const el = elements.find(e => e.children.length === 0 && e.innerText?.includes(time));
         if (el) el.click();
-      });
-      console.log('12:00 클릭 완료');
+      }, TARGET_TIME);
+      console.log(`${TARGET_TIME} 클릭 완료`);
       await page.waitForTimeout(1000);
 
       // 연락처 입력
       const phoneInput = page.locator('input').first();
       await phoneInput.click();
       await phoneInput.fill(PHONE_NUMBER);
-      console.log('연락처 입력 완료');
+      console.log('연락처 입력 완료:', PHONE_NUMBER);
       await page.waitForTimeout(500);
 
       // 예약하기 클릭
@@ -113,8 +94,7 @@ async function runMacro() {
   }
 
   await browser.close();
-  console.log('모든 시도 완료 (FULL이거나 오류)');
-  // exit code 1 제거 - FULL이어도 정상 종료
+  console.log('모든 시도 완료');
 }
 
 runMacro();
