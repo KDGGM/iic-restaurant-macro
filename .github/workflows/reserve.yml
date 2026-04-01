@@ -8,7 +8,7 @@ on:
 jobs:
   reserve:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: 저장소 체크아웃
@@ -28,19 +28,13 @@ jobs:
       - name: 예약 매크로 실행
         run: node macro.js
 
-      - name: 결과 스크린샷 업로드 (성공)
-        if: success()
+      - name: 결과 스크린샷 업로드
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reservation-result-${{ github.run_id }}
-          path: reservation_result.png
-          retention-days: 7
-
-      - name: 오류 스크린샷 업로드 (실패)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: error-screenshots-${{ github.run_id }}
-          path: error_attempt_*.png
+          name: 예약결과-${{ github.run_id }}
+          path: |
+            result_*.png
+            error_*.png
           retention-days: 7
           if-no-files-found: ignore
