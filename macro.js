@@ -1,13 +1,18 @@
 const { chromium } = require('playwright');
 
-const PHONE_NUMBER = '01044801692';
 const TARGET_URL = 'https://iic-restaurant2.vercel.app/';
-const TARGET_TIME = '13:00';
+const TARGET_TIME = '12:00';
 const MAX_RETRIES = 5;
 const RETRY_INTERVAL_MS = 5000;
 
-async function runMacro() {
-  console.log(`[${new Date().toISOString()}] 매크로 시작 - ${TARGET_TIME} 예약 시도`);
+const PHONE_NUMBERS = [
+  '01044801692',
+  '01098899387',
+  '01062250205',
+];
+
+async function reserveOne(phoneNumber) {
+  console.log(`\n📱 [${phoneNumber}] 예약 시작`);
 
   const browser = await chromium.launch({
     headless: true,
@@ -26,9 +31,6 @@ async function runMacro() {
       console.log(`[시도 ${attempt}/${MAX_RETRIES}] 페이지 로딩 중...`);
       await page.goto(TARGET_URL, { waitUntil: 'load', timeout: 60000 });
       await page.waitForTimeout(5000);
-
-      const bodyText = await page.evaluate(() => document.body.innerText);
-      console.log('페이지 텍스트:', bodyText.substring(0, 300));
 
       // 슬롯 상태 확인
       const slotStatus = await page.evaluate((time) => {
@@ -54,17 +56,12 @@ async function runMacro() {
         continue;
       }
 
-      // 시간 슬롯을 Playwright locator로 직접 클릭 (React 이벤트 호환)
-      console.log('시간 슬롯 클릭 시도...');
+      // 시간 슬롯 클릭
       const timeSlot = page.locator(`text=${TARGET_TIME}`).first();
       await timeSlot.scrollIntoViewIfNeeded();
       await timeSlot.click({ force: true });
       console.log(`${TARGET_TIME} 클릭 완료`);
       await page.waitForTimeout(2000);
-
-      // 클릭 후 선택됐는지 확인
-      const afterClickText = await page.evaluate(() => document.body.innerText);
-      console.log('슬롯 클릭 후 페이지:', afterClickText.substring(0, 300));
 
       // 연락처 입력
       const phoneInput = page.locator('input').first();
@@ -72,40 +69,46 @@ async function runMacro() {
       await phoneInput.click({ force: true });
       await phoneInput.fill('');
       await page.waitForTimeout(300);
-      await phoneInput.type(PHONE_NUMBER, { delay: 80 });
-      console.log('연락처 입력 완료:', PHONE_NUMBER);
+      await phoneInput.type(phoneNumber, { delay: 80 });
+      console.log('연락처 입력 완료:', phoneNumber);
       await page.waitForTimeout(1000);
 
-      // 스크린샷 (버튼 클릭 전 상태 확인용)
-      await page.screenshot({ path: 'before_submit.png' });
-
-      // 예약하기 → 버튼 클릭 (Playwright locator 사용)
-      console.log('예약하기 버튼 클릭 시도...');
+      // 예약하기 버튼 클릭
       const submitBtn = page.locator('button:has-text("예약하기 →")').first();
       await submitBtn.scrollIntoViewIfNeeded();
       await submitBtn.click({ force: true });
       console.log('예약하기 버튼 클릭 완료!');
 
       await page.waitForTimeout(5000);
-
-      const resultText = await page.evaluate(() => document.body.innerText);
-      console.log('예약 후 페이지:', resultText.substring(0, 300));
-
-      await page.screenshot({ path: 'reservation_result.png' });
-      console.log('✅ 예약 완료!');
+      await page.screenshot({ path: `result_${phoneNumber}.png` });
+      console.log(`✅ [${phoneNumber}] 예약 완료!`);
 
       await browser.close();
-      return;
+      return true;
 
     } catch (err) {
       console.error(`오류: ${err.message}`);
-      await page.screenshot({ path: `error_attempt_${attempt}.png` }).catch(() => {});
+      await page.screenshot({ path: `error_${phoneNumber}_${attempt}.png` }).catch(() => {});
       await page.waitForTimeout(RETRY_INTERVAL_MS);
     }
   }
 
   await browser.close();
-  console.log('모든 시도 완료');
+  console.log(`❌ [${phoneNumber}] 예약 실패`);
+  return false;
 }
 
-runMacro();
+async function runAll() {
+  console.log(`[${new Date().toISOString()}] 전체 예약 시작 - ${TARGET_TIME}`);
+
+  for (let i = 0; i < PHONE_NUMBERS.length; i++) {
+    console.log(`\n===== ${i + 1}/${PHONE_NUMBERS.length} 번째 예약 =====`);
+    await reserveOne(PHONE_NUMBERS[i]);
+    // 각 예약 사이 3초 대기
+    if (i < PHONE_NUMBERS.length - 1) await new Promise(r => setTimeout(r, 3000));
+  }
+
+  console.log('\n🎉 전체 예약 작업 완료!');
+}
+
+runAll();
