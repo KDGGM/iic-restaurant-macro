@@ -1,18 +1,16 @@
 const { chromium } = require('playwright');
+const fs = require('fs');
 
 const TARGET_URL = 'https://iic-restaurant2.vercel.app/';
 const TARGET_TIME = '12:00';
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 10;
 const RETRY_INTERVAL_MS = 5000;
 
-const PHONE_NUMBERS = [
-  '01044801692',
-  '01098899387',
-  '01062250205',
-];
+const data = JSON.parse(fs.readFileSync('numbers.json', 'utf-8'));
+const RESERVATIONS = data.예약자목록;
 
-async function reserveOne(phoneNumber) {
-  console.log(`\n📱 [${phoneNumber}] 예약 시작`);
+async function reserveOne(이름, phoneNumber) {
+  console.log(`\n📱 [${이름} / ${phoneNumber}] 예약 시작`);
 
   const browser = await chromium.launch({
     headless: true,
@@ -32,38 +30,35 @@ async function reserveOne(phoneNumber) {
       await page.goto(TARGET_URL, { waitUntil: 'load', timeout: 60000 });
       await page.waitForTimeout(5000);
 
-      // 슬롯 상태 확인
-      const slotStatus = await page.evaluate((time) => {
-        const elements = Array.from(document.querySelectorAll('*'));
-        const el = elements.find(e => e.children.length === 0 && e.innerText?.includes(time));
-        if (!el) return 'NOT_FOUND';
-        const parent = el.closest('div') || el.parentElement;
-        return parent?.innerText?.trim();
+      const slotInfo = await page.evaluate((time) => {
+        const all = Array.from(document.querySelectorAll('*'));
+        const el = all.find(e => e.children.length === 0 && e.innerText?.trim() === time);
+        if (!el) return { found: false };
+        const parent = el.closest('div[class]') || el.parentElement?.parentElement || el.parentElement;
+        return { found: true, parentText: parent?.innerText?.trim() };
       }, TARGET_TIME);
 
-      console.log(`${TARGET_TIME} 슬롯 상태:`, slotStatus);
+      console.log(`${TARGET_TIME} 슬롯 상태:`, slotInfo.parentText);
 
-      if (slotStatus === 'NOT_FOUND') {
-        console.log('슬롯을 찾을 수 없습니다. 재시도...');
+      if (!slotInfo.found) {
+        console.log('슬롯 못 찾음. 재시도...');
         await page.waitForTimeout(RETRY_INTERVAL_MS);
         continue;
       }
 
-      if (slotStatus.toUpperCase().includes('FULL') || slotStatus.includes('꽉')) {
+      if (slotInfo.parentText?.toUpperCase().includes('FULL')) {
         console.log('FULL 상태. 재시도...');
         await page.reload({ waitUntil: 'load' });
         await page.waitForTimeout(RETRY_INTERVAL_MS);
         continue;
       }
 
-      // 시간 슬롯 클릭
-      const timeSlot = page.locator(`text=${TARGET_TIME}`).first();
+      const timeSlot = page.locator(`text="${TARGET_TIME}"`).first();
       await timeSlot.scrollIntoViewIfNeeded();
       await timeSlot.click({ force: true });
       console.log(`${TARGET_TIME} 클릭 완료`);
       await page.waitForTimeout(2000);
 
-      // 연락처 입력
       const phoneInput = page.locator('input').first();
       await phoneInput.scrollIntoViewIfNeeded();
       await phoneInput.click({ force: true });
@@ -73,15 +68,14 @@ async function reserveOne(phoneNumber) {
       console.log('연락처 입력 완료:', phoneNumber);
       await page.waitForTimeout(1000);
 
-      // 예약하기 버튼 클릭
       const submitBtn = page.locator('button:has-text("예약하기 →")').first();
       await submitBtn.scrollIntoViewIfNeeded();
       await submitBtn.click({ force: true });
-      console.log('예약하기 버튼 클릭 완료!');
+      console.log('예약하기 클릭 완료!');
 
       await page.waitForTimeout(5000);
       await page.screenshot({ path: `result_${phoneNumber}.png` });
-      console.log(`✅ [${phoneNumber}] 예약 완료!`);
+      console.log(`✅ [${이름}] 예약 완료!`);
 
       await browser.close();
       return true;
@@ -94,18 +88,19 @@ async function reserveOne(phoneNumber) {
   }
 
   await browser.close();
-  console.log(`❌ [${phoneNumber}] 예약 실패`);
+  console.log(`❌ [${이름}] 예약 실패`);
   return false;
 }
 
 async function runAll() {
   console.log(`[${new Date().toISOString()}] 전체 예약 시작 - ${TARGET_TIME}`);
+  console.log(`예약 대상 ${RESERVATIONS.length}명:`, RESERVATIONS.map(r => r.이름).join(', '));
 
-  for (let i = 0; i < PHONE_NUMBERS.length; i++) {
-    console.log(`\n===== ${i + 1}/${PHONE_NUMBERS.length} 번째 예약 =====`);
-    await reserveOne(PHONE_NUMBERS[i]);
-    // 각 예약 사이 3초 대기
-    if (i < PHONE_NUMBERS.length - 1) await new Promise(r => setTimeout(r, 3000));
+  for (let i = 0; i < RESERVATIONS.length; i++) {
+    const { 이름, 번호 } = RESERVATIONS[i];
+    console.log(`\n===== ${i + 1}/${RESERVATIONS.length} 번째 예약 =====`);
+    await reserveOne(이름, 번호);
+    if (i < RESERVATIONS.length - 1) await new Promise(r => setTimeout(r, 3000));
   }
 
   console.log('\n🎉 전체 예약 작업 완료!');
