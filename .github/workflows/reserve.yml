@@ -2,7 +2,7 @@ name: IIC Restaurant 자동 예약 매크로
 
 on:
   schedule:
-    - cron: '0 23 * * 0-4'
+    - cron: '50 22 * * 0-4'
   workflow_dispatch:
 
 jobs:
@@ -24,6 +24,19 @@ jobs:
 
       - name: Playwright Chromium 브라우저 설치
         run: npx playwright install chromium --with-deps
+
+      - name: 08:00 정각까지 대기
+        run: |
+          TARGET="08:00:00"
+          while true; do
+            NOW=$(TZ="Asia/Seoul" date +"%H:%M:%S")
+            echo "현재 KST 시간: $NOW"
+            if [[ "$NOW" > "$TARGET" ]] || [[ "$NOW" == "$TARGET" ]]; then
+              echo "08:00 도달! 예약 시작"
+              break
+            fi
+            sleep 5
+          done
 
       - name: 예약 매크로 실행
         run: node macro.js
