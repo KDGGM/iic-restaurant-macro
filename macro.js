@@ -9,41 +9,6 @@ const RETRY_INTERVAL_MS = 3000;
 const data = JSON.parse(fs.readFileSync('numbers.json', 'utf-8'));
 const RESERVATIONS = data.예약자목록;
 
-async function isSiteOpen() {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
-  const context = await browser.newContext({ locale: 'ko-KR', timezoneId: 'Asia/Seoul' });
-  const page = await context.newPage();
-
-  try {
-    await page.goto(TARGET_URL, { waitUntil: 'load', timeout: 60000 });
-    await page.waitForTimeout(5000);
-
-    const slotInfo = await page.evaluate((time) => {
-      const all = Array.from(document.querySelectorAll('*'));
-      const el = all.find(e => e.children.length === 0 && e.innerText?.trim() === time);
-      if (!el) return { found: false };
-      const parent = el.parentElement;
-      return { found: true, parentText: parent?.innerText?.trim() };
-    }, TARGET_TIME);
-
-    console.log('사이트 상태 확인:', JSON.stringify(slotInfo));
-    await browser.close();
-
-    if (!slotInfo.found) {
-      console.log('❌ 예약 사이트가 닫혀 있습니다. 오늘은 종료합니다.');
-      return false;
-    }
-    return true;
-  } catch (err) {
-    await browser.close();
-    console.log('❌ 사이트 접속 실패:', err.message);
-    return false;
-  }
-}
-
 async function reserveOne(이름, phoneNumber) {
   console.log(`\n📱 [${이름} / ${phoneNumber}] 예약 시작`);
 
@@ -126,10 +91,7 @@ async function runAll() {
   console.log(`[${new Date().toISOString()}] 전체 예약 시작 - ${TARGET_TIME}`);
   console.log(`예약 대상 ${RESERVATIONS.length}명:`, RESERVATIONS.map(r => r.이름).join(', '));
 
-  const open = await isSiteOpen();
-  if (!open) return;
-
-  // 병렬 실행: 모든 예약자가 동시에 시작
+  // isSiteOpen 체크 없이 바로 병렬 실행
   const results = await Promise.all(
     RESERVATIONS.map(({ 이름, 번호 }) => reserveOne(이름, 번호))
   );
