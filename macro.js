@@ -56,7 +56,7 @@ async function reserveOne(이름, phoneNumber) {
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      console.log(`[시도 ${attempt}/${MAX_RETRIES}] 페이지 로딩 중...`);
+      console.log(`[${이름}][시도 ${attempt}/${MAX_RETRIES}] 페이지 로딩 중...`);
       await page.goto(TARGET_URL, { waitUntil: 'load', timeout: 60000 });
       await page.waitForTimeout(5000);
 
@@ -68,16 +68,16 @@ async function reserveOne(이름, phoneNumber) {
         return { found: true, parentText: parent?.innerText?.trim() };
       }, TARGET_TIME);
 
-      console.log(`${TARGET_TIME} 슬롯 상태:`, slotInfo.parentText);
+      console.log(`[${이름}] ${TARGET_TIME} 슬롯 상태:`, slotInfo.parentText);
 
       if (!slotInfo.found) {
-        console.log('슬롯 못 찾음. 재시도...');
+        console.log(`[${이름}] 슬롯 못 찾음. 재시도...`);
         await page.waitForTimeout(RETRY_INTERVAL_MS);
         continue;
       }
 
       if (slotInfo.parentText?.toUpperCase().includes('FULL')) {
-        console.log('FULL 상태. 재시도...');
+        console.log(`[${이름}] FULL 상태. 재시도...`);
         await page.reload({ waitUntil: 'load' });
         await page.waitForTimeout(RETRY_INTERVAL_MS);
         continue;
@@ -86,7 +86,7 @@ async function reserveOne(이름, phoneNumber) {
       const timeSlot = page.locator(`text="${TARGET_TIME}"`).first();
       await timeSlot.scrollIntoViewIfNeeded();
       await timeSlot.click({ force: true });
-      console.log(`${TARGET_TIME} 클릭 완료`);
+      console.log(`[${이름}] ${TARGET_TIME} 클릭 완료`);
       await page.waitForTimeout(2000);
 
       const phoneInput = page.locator('input').first();
@@ -95,13 +95,13 @@ async function reserveOne(이름, phoneNumber) {
       await phoneInput.fill('');
       await page.waitForTimeout(300);
       await phoneInput.type(phoneNumber, { delay: 80 });
-      console.log('연락처 입력 완료:', phoneNumber);
+      console.log(`[${이름}] 연락처 입력 완료:`, phoneNumber);
       await page.waitForTimeout(1000);
 
       const submitBtn = page.locator('button:has-text("예약하기 →")').first();
       await submitBtn.scrollIntoViewIfNeeded();
       await submitBtn.click({ force: true });
-      console.log('예약하기 클릭 완료!');
+      console.log(`[${이름}] 예약하기 클릭 완료!`);
 
       await page.waitForTimeout(5000);
       await page.screenshot({ path: `result_${phoneNumber}.png` });
@@ -111,7 +111,7 @@ async function reserveOne(이름, phoneNumber) {
       return true;
 
     } catch (err) {
-      console.error(`오류: ${err.message}`);
+      console.error(`[${이름}] 오류: ${err.message}`);
       await page.screenshot({ path: `error_${phoneNumber}_${attempt}.png` }).catch(() => {});
       await page.waitForTimeout(RETRY_INTERVAL_MS);
     }
@@ -129,14 +129,14 @@ async function runAll() {
   const open = await isSiteOpen();
   if (!open) return;
 
-  for (let i = 0; i < RESERVATIONS.length; i++) {
-    const { 이름, 번호 } = RESERVATIONS[i];
-    console.log(`\n===== ${i + 1}/${RESERVATIONS.length} 번째 예약 =====`);
-    await reserveOne(이름, 번호);
-    if (i < RESERVATIONS.length - 1) await new Promise(r => setTimeout(r, 3000));
-  }
+  // 병렬 실행: 모든 예약자가 동시에 시작
+  const results = await Promise.all(
+    RESERVATIONS.map(({ 이름, 번호 }) => reserveOne(이름, 번호))
+  );
 
-  console.log('\n🎉 전체 예약 작업 완료!');
+  const 성공 = results.filter(Boolean).length;
+  const 실패 = results.filter(r => !r).length;
+  console.log(`\n🎉 전체 예약 작업 완료! 성공: ${성공}명 / 실패: ${실패}명`);
 }
 
 runAll();
